@@ -53,14 +53,14 @@
 
 1. **梯度裁剪（Gradient Clipping）**
    - 限制每个样本对梯度的贡献，防止单个数据点主导模型训练。
-   - **公式**：$\text{clip}_C(g) = \min\left(1, \frac{C}{\|g\|_2}\right) g$ , C 为裁剪阈值，确保梯度范数不超过 C。
+   - **公式**：$ \text{clip}_C(g) = \min\left(1, \frac{C}{\|g\|_2}\right) g $  , C 为裁剪阈值，确保梯度范数不超过 C。
 2. **噪声注入（Noise Addition）**
    - 向梯度或查询结果中添加高斯噪声，掩盖真实数据的影响。
-   - **公式**：$\tilde{g} = \frac{1}{B} \sum_{i=1}^B \text{clip}_C(g_i) + \mathcal{N}(0, \sigma^2 I)$ , B 为批量大小，$\sigma$ 控制噪声强度。
+   - **公式**： $ \tilde{g} = \frac{1}{B} \sum_{i=1}^B \text{clip}_C(g_i) + \mathcal{N}(0, \sigma^2 I) $  , B 为批量大小，$\sigma$ 控制噪声强度。
 3. **隐私预算（Privacy Budget）**
    - **ε（epsilon）**：隐私强度，ε 越小隐私保护越强。
    - **δ（delta）**：允许的失败概率，δ 越小隐私越严格。
-   - **公式**：$\text{Pr}[M(D) \in S] \leq e^\epsilon \cdot \text{Pr}[M(D') \in S] + \delta$ D 和 \(D'\) 为相邻数据集，M 为隐私机制。
+   - **公式**： $ \text{Pr}[M(D) \in S] \leq e^\epsilon \cdot \text{Pr}[M(D') \in S] + \delta $ ,D 和 \(D'\) 为相邻数据集，M 为隐私机制。
 
 ## **核心优势**
 
@@ -138,6 +138,18 @@
 
 # Distill-SD：轻量级稳定扩散模型
 
+# FID
+
+FID 是一种用于评估生成图像质量的**统计距离指标**，通过比较生成图像与真实图像的统计分布差异来衡量模型性能。其核心思想是：**分布越接近，生成图像越真实**。
+
+1. 对于生成图像集和真实图像集，分别通过**Inception网络**计算它们的特征表示。这一步骤会得到每个图像集的特征向量。
+
+2. 计算每个集合的特征向量的均值和协方差矩阵。具体参数有：**生成图像的特征向量的均值和协方差矩阵 ，真实图像的特征向量的均值和协方差矩阵**
+
+3. 具体计算公式为：
+
+   $FID = ||\mu_1 - \mu_2||^2 + Tr(\Sigma_1 + \Sigma_2 - 2\sqrt{\Sigma_1\Sigma_2})$
+
 # 扩散模型详细
 
 #### **1. 核心思想**
@@ -148,22 +160,33 @@
 
 - **目标**：将真实数据 $x_0 \sim p_{\text{data}}$ 逐步添加噪声，最终变为纯噪声 $x_T \sim \mathcal{N}(0, I)$。
 - **公式：**
-  - **单步扩散**：在时间步 t，添加高斯噪声： $x_t = \sqrt{\alpha_t} \, x_{t-1} + \sqrt{1 - \alpha_t} \, \epsilon_{t-1}, \quad \epsilon_{t-1} \sim \mathcal{N}(0, I)$ 其中 $\alpha_t = 1 - \beta_t$，$\beta_t$ 是噪声方差调度参数。
-  - **累积噪声**：通过重参数化，直接计算 $x_t$ 为初始数据 $x_0$ 和噪声的线性组合： $x_t = \sqrt{\bar{\alpha}_t} \, x_0 + \sqrt{1 - \bar{\alpha}_t} \, \epsilon, \quad \epsilon \sim \mathcal{N}(0, I)$ 其中 $\bar{\alpha}_t = \prod_{s=1}^t \alpha_s$。
+  - **单步扩散**：在时间步 t，添加高斯噪声： $x_t = \sqrt{\alpha_t}  x_{t-1} + \sqrt{1 - \alpha_t}  \epsilon_{t-1}$, $\quad \epsilon_{t-1} \sim \mathcal{N}(0, I)$ 其中 $\alpha_t = 1 - \beta_t$，$\beta_t$ 是噪声方差调度参数。
+  - **累积噪声**：通过重参数化，直接计算 $x_t$ 为初始数据 $x_0$ 和噪声的线性组合： $x_t = \sqrt{\bar{\alpha}_t}  x_0 + \sqrt{1 - \bar{\alpha}_t}  \epsilon, \quad \epsilon \sim \mathcal{N}(0, I)$ 其中 $\bar{\alpha}_t = \prod_{s=1}^t \alpha_s$。
 
 #### **3. 反向去噪过程（Reverse Denoising Process）**
 
 - **目标**：学习从纯噪声 $x_T$逐步恢复真实数据 $x_0$。
+
 - **公式：**
-  - **单步去噪**：在时间步 t，使用神经网络 $\epsilon_\theta(x_t, t)$ 预测噪声 $\epsilon$，并更新样本： $x_{t-1} = \frac{1}{\sqrt{\alpha_t}} \left( x_t - \frac{1 - \alpha_t}{\sqrt{1 - \bar{\alpha}_t}} \epsilon_\theta(x_t, t) \right) + \sqrt{\frac{1 - \alpha_t}{\alpha_t}} \, \epsilon'$ 其中 $\epsilon' \sim \mathcal{N}(0, I)$ 是随机噪声（用于保持多样性）。
-  - **无噪声版本**：若仅需确定性去噪，可省略 $\epsilon'$： $x_{t-1} = \frac{1}{\sqrt{\alpha_t}} \left( x_t - \frac{1 - \alpha_t}{\sqrt{1 - \bar{\alpha}_t}} \epsilon_\theta(x_t, t) \right)$
+  
+  - **单步去噪**：在时间步 t，使用神经网络 $\epsilon_\theta(x_t, t)$ 预测噪声 $\epsilon$，并更新样本： 
+  
+    $x_{t-1} = \frac{1}{\sqrt{\alpha_t}} \left( x_t - \frac{1 - \alpha_t}{\sqrt{1 - \bar{\alpha}_t}} \epsilon_\theta(x_t, t) \right) + \sqrt{\frac{1 - \alpha_t}{\alpha_t}}  \epsilon'$  ，其中 $\epsilon' \sim \mathcal{N}(0, I)$ 是随机噪声（用于保持多样性）。
+  
+  - **无噪声版本**：若仅需确定性去噪，可省略 $\epsilon'$：  $ x_{t-1} = \frac{1}{\sqrt{\alpha_t}} \left( x_t - \frac{1 - \alpha_t}{\sqrt{1 - \bar{\alpha}_t}} \epsilon_\theta(x_t, t) \right) $ 
 
 #### **4. 训练目标（Loss Function）**
 
 - **目标**：训练神经网络 $\epsilon_\theta$ 预测噪声 $\epsilon$，使 $x_{t-1}$ 尽可能接近真实数据。
+
 - **损失函数：**
-  - **DDPM 损失**：最小化预测噪声与真实噪声的 L2 距离：$\mathcal{L}_{\text{DDPM}} = \mathbb{E}_{x_0, \epsilon, t} \left[ \left\| \epsilon_\theta \left( \sqrt{\bar{\alpha}_t} \, x_0 + \sqrt{1 - \bar{\alpha}_t} \, \epsilon, t \right) - \epsilon \right\|^2 \right]$
-  - **加权损失**：对不同时间步的损失加权，例如高噪声阶段（早期时间步）赋予更高权重： $\mathcal{L}_{\text{weighted}} = \mathbb{E}_{x_0, \epsilon, t} \left[ \lambda_t \left\| \epsilon_\theta(x_t, t) - \epsilon \right\|^2 \right]$ 其中 $\lambda_t = \frac{1}{\sqrt{1 - \bar{\alpha}_t}}$。
+  - **DDPM 损失**：最小化预测噪声与真实噪声的 L2 距离：
+  
+    $ \mathcal{L}_{\text{DDPM}} = \mathbb{E}_{x_0, \epsilon, t} \left[ \left\| \epsilon_\theta \left( \sqrt{\bar{\alpha}_t} \, x_0 + \sqrt{1 - \bar{\alpha}_t} \, \epsilon, t \right) - \epsilon \right\|^2 \right] $
+  
+  - **加权损失**：对不同时间步的损失加权，例如高噪声阶段（早期时间步）赋予更高权重： 
+  
+    $ \mathcal{L}_{\text{weighted}} = \mathbb{E}_{x_0, \epsilon, t} \left[ \lambda_t \left\| \epsilon_\theta(x_t, t) - \epsilon \right\|^2 \right] $ ， 其中  $ \lambda_t = \frac{1}{\sqrt{1 - \bar{\alpha}_t}} $ 。
 
 #### **5. 采样过程（Sampling）**
 
